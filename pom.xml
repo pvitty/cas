@@ -611,6 +611,7 @@ pTSqrOnmqmUUnopqmvummmmmmUUnopqmvummmmmmUUA1jJ
     <module>cas-server-integration-berkeleydb</module>
     <module>cas-server-integration-memcached</module>
     <module>cas-server-integration-restlet</module>
+    <module>cas-server-integration-restlet2</module>
     <module>cas-server-uber-webapp</module>
     <module>cas-server-documentation</module>
   </modules>
