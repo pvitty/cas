@@ -1,0 +1,43 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project
+
+Jasig Central Authentication Service (CAS) Server, version 3.4.12-SNAPSHOT — a Spring/Spring-Webflow-based SSO server. This is the legacy 3.4.x line: `groupId=org.jasig.cas`, parent `org.jasig.parent:jasig-parent:21`, targeting **Java 1.5** source/target and J2EE 1.3 (Servlet API 2.5). The codebase predates Apereo's rename and many of its declared repositories/dependencies are unobtainable from modern Maven Central.
+
+## Build commands
+
+Use Maven from the repo root. The pom enforces JDK >=1.5 and Maven >=2.0.9, but Maven 3.x with JDK 8 is what works in practice.
+
+- `mvn -B package` — full reactor build, produces JARs and the WAR (`cas-server-webapp/target/*.war`).
+- `mvn -pl cas-server-core -am test` — build and test a single module with its dependencies.
+- `mvn -pl cas-server-core -Dtest=SomeClassTests test` — run a single test class.
+- `mvn -DskipTests package` — skip tests (useful given some tests require an internet connection per README).
+- Surefire only picks up `**/*Tests.java` and excludes `Abstract*.java` (configured in root POM).
+
+### CI build environment quirks
+
+GitHub Actions builds via `.github/workflows/build.yml` and **must** pass `-s .github/maven-settings.xml`. That settings file mirrors `external:http:*` repositories through HTTPS Maven Central because Maven 3.8.1+ blocks the POM's HTTP repos (`http://developer.ja-sig.org/maven2`, `http://repository.jboss.org/...`). It also activates a profile that adds `https://build.shibboleth.net/nexus/content/repositories/releases/` for `org.opensaml:opensaml:1.1b`. **Do not delete `.github/maven-settings.xml` without also fixing the POM**, or CI will instantly fail at parent-POM resolution.
+
+`javax.xml:xmldsig:1.0` is referenced as a compile dependency by `cas-server-core` but is unavailable from any free public Maven repository (Sun-licensed). Until that's vendored or replaced, `mvn package` will fail in `cas-server-core`. The plugin repo `https://nexus.codehaus.org/...` declared in the root POM is also DNS-dead — Maven retries it on every artifact and falls through to Central, producing noisy warnings but not failing.
+
+## Module architecture
+
+The reactor (defined in the root `pom.xml`) is layered and the build order matters:
+
+1. **`cas-server-core`** — protocol implementation. Contains `CentralAuthenticationServiceImpl` (the central façade), and the `authentication`, `ticket`, `services`, `validation`, `web`, `audit`, `aspect`, `remoting`, and `util` packages. Everything else depends on this.
+2. **Authentication-handler / attribute-source modules** — `cas-server-support-{generic,jdbc,ldap,legacy,openid,radius,spnego,trusted,x509}`. Each plugs an `AuthenticationHandler` and/or `PrincipalResolver` into the core via Spring wiring.
+3. **Ticket-registry / cache integrations** — `cas-server-integration-{berkeleydb,jboss,memcached,restlet}`. Alternative `TicketRegistry` implementations.
+4. **`cas-server-webapp`** — the actual deployable WAR. Spring-Webflow login flow, JSP views under `src/main/webapp/WEB-INF/view/jsp/default/ui`, themes under `src/main/webapp/themes/`. Skin customization is the typical deployer entry point (see `INSTALL.txt`).
+5. **`cas-server-uber-webapp`** — packaging-only WAR pulling in every support/integration module; convenience artifact, not the canonical deployable.
+6. **`cas-server-compatibility`** — interop tests against the CAS protocol.
+7. **`cas-server-documentation`** — docs-only POM module.
+
+Cross-cutting concerns (audit logging via Inspektr, perf timing) are woven via AspectJ — the root POM binds `aspectj-maven-plugin:compile` into every module, so adding `@Aspect` classes anywhere is picked up automatically.
+
+## Conventions
+
+- Test class naming: `*Tests.java` (not `*Test`). Abstract base test classes use the `Abstract` prefix and are excluded from Surefire.
+- Spring XML wiring under `src/main/resources/` and `src/main/webapp/WEB-INF/` is the source of truth for how modules compose; pure Java introspection will miss the actual graph.
+- Source/target is locked to 1.5 in the root POM; do not introduce language features beyond Java 5 (no generics-of-generics inference, no try-with-resources, no diamond operator).
