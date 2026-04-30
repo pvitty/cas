@@ -16,6 +16,12 @@ Use Maven from the repo root. The pom enforces JDK >=1.5 and Maven >=2.0.9, but 
 - `mvn -DskipTests package` — skip tests (useful given some tests require an internet connection per README).
 - Surefire only picks up `**/*Tests.java` and excludes `Abstract*.java` (configured in root POM).
 
+### Continuous integration
+
+CI runs on **GitHub Actions** via `.github/workflows/build.yml` (push, pull_request, manual dispatch). The workflow uses Zulu JDK 8, Maven dependency caching, and invokes `mvn -B -U -e -fae -s .github/maven-settings.xml package`. It uploads built WAR/JAR artifacts and Surefire reports.
+
+The Maven step is currently `continue-on-error: true` — see the next section for why. Workflow status will go green even when `mvn package` fails; the job log still shows the Maven failure. Once the missing legacy deps are addressed, drop `continue-on-error` so CI reflects real build status.
+
 ### CI build environment quirks
 
 GitHub Actions builds via `.github/workflows/build.yml` and **must** pass `-s .github/maven-settings.xml`. That settings file mirrors `external:http:*` repositories through HTTPS Maven Central because Maven 3.8.1+ blocks the POM's HTTP repos (`http://developer.ja-sig.org/maven2`, `http://repository.jboss.org/...`). It also activates a profile that adds `https://build.shibboleth.net/nexus/content/repositories/releases/` for `org.opensaml:opensaml:1.1b`. **Do not delete `.github/maven-settings.xml` without also fixing the POM**, or CI will instantly fail at parent-POM resolution.
